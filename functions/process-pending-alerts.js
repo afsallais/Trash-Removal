@@ -156,11 +156,11 @@ async function sendAlert(alertDoc) {
     }
 
     await jobRef.set({
-      status: "sent",
+      status: sentTokens.length ? "sent" : "failed",
       sentTokens,
       sentCount: sentTokens.length,
       finishedAt: FieldValue.serverTimestamp(),
-      lastError: FieldValue.delete(),
+      lastError: sentTokens.length ? FieldValue.delete() : "FCM returned no successful deliveries",
     }, { merge: true });
     await alertDoc.ref.set({
       push: {
