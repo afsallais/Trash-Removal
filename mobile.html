@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chore Board — Mobile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --wall:#061534;      /* room behind the board */
+  --board:#0a2b6e;     /* enamel sign blue */
+  --frame:#1d4aa8;
+  --ink:#06173f;       /* text on yellow/green/coral */
+  --paper:#f6f1de;     /* flap lettering */
+  --muted:#a9bde6;
+  --line:rgba(246,241,222,.18);
+  --signal:#ffc61e;    /* platform-sign yellow */
+  --coral:#ff7a59;
+  --go:#5be39a;
+  --flap:"Barlow Condensed","Roboto Condensed","Arial Narrow",sans-serif;
+  --body:"Atkinson Hyperlegible","Segoe UI",Roboto,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+/* 1rem fits both the width AND the height of the screen (designed on a 80 x 45 rem canvas),
+   so nothing overflows on wide, short or 4:3 displays. */
+html{font-size:min(calc(100vw / 80), calc(100vh / 45))}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--wall);color:var(--paper);font-family:var(--body)}
+.screen{height:100vh;display:flex;flex-direction:column;padding:1.4rem 3rem}
+
+header{display:flex;justify-content:space-between;align-items:center;flex:none}
+.sign{
+  background:var(--signal);color:var(--ink);font-family:var(--flap);font-weight:700;
+  font-size:2.3rem;line-height:1;padding:.45rem 1.2rem .5rem;border-radius:.45rem
+}
+.clock{text-align:right}
+.time{font-family:var(--flap);font-weight:600;font-size:3.8rem;line-height:.95;letter-spacing:.01em}
+.date{font-size:1.4rem;color:var(--muted);margin-top:.2rem}
+
+/* ---- the board ---- */
+.board{
+  flex:1;min-height:0;display:flex;flex-direction:column;margin:.9rem 0;
+  background:var(--board);border:.25rem solid var(--frame);border-radius:1.2rem;overflow:hidden
+}
+.block{flex:1;min-height:0;min-width:0;display:flex;flex-direction:column;padding:.9rem 2rem 1rem;overflow:hidden}
+.block+.block{border-top:.15rem solid var(--line)}
+.block.hollow{flex:none}
+
+.blockHead{display:flex;align-items:baseline;gap:1.2rem;flex:none}
+.blockHead h2{margin:0;font-family:var(--flap);font-weight:700;font-size:2.8rem;line-height:1;color:var(--signal)}
+.group{font-size:1.6rem;font-weight:700;color:var(--paper)}
+.sub{margin-left:auto;font-size:1.3rem;color:var(--muted)}
+
+.nowRow{flex:1;min-height:0;display:flex;align-items:center;justify-content:space-between;gap:2rem}
+.names{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1.2rem}
+.word{display:inline-flex;gap:.2rem}
+.amp{font-family:var(--flap);font-weight:600;font-size:2.6rem;color:var(--muted)}
+
+/* split-flap tiles: lighter top half, dark seam through the middle */
+.tile{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;
+  width:var(--tw);height:var(--th);font-family:var(--flap);font-weight:700;font-size:var(--tf);line-height:1;
+  color:var(--paper);background:linear-gradient(#10306a 50%,#071a44 50%);border-radius:.35rem
+}
+.tile::after{content:"";position:absolute;left:0;right:0;top:50%;height:.14rem;margin-top:-.07rem;background:#020a1f}
+.sz1{--tw:4rem;--th:5.4rem;--tf:4.5rem}
+.sz2{--tw:3.1rem;--th:4.3rem;--tf:3.6rem}
+.sz3{--tw:2.3rem;--th:3.2rem;--tf:2.7rem}
+
+/* remote control: choose a duty with the arrows, OK to mark it done */
+.act{
+  display:none;flex:none;margin-left:.8rem;padding:.1rem 1rem .15rem;border-radius:.35rem;border:.15rem solid var(--muted);
+  color:var(--muted);font-family:var(--flap);font-weight:600;font-size:1.6rem;line-height:1.2
+}
+.board.remote .act{display:inline-block}
+.act.sel{background:var(--signal);border-color:var(--signal);color:var(--ink)}
+.act.armed{background:var(--coral);border-color:var(--coral);color:var(--ink)}
+.block.sel{box-shadow:inset .35rem 0 0 var(--signal)}
+
+/* both duties on the board: tighten everything so two blocks fit the screen */
+.board.two .block{padding:.7rem 1.8rem .8rem}
+.board.two .blockHead h2{font-size:2.4rem}
+.board.two .sz1{--tw:3.2rem;--th:4.2rem;--tf:3.5rem}
+.board.two .sz2{--tw:2.5rem;--th:3.4rem;--tf:2.8rem}
+.board.two .sz3{--tw:1.7rem;--th:2.4rem;--tf:2rem}
+.board.two .amp{font-size:2rem}
+.board.two .due{font-size:1.4rem}
+.board.two .tag{font-size:1.6rem}
+.board.two .when{gap:.35rem}
+.board.two .late{font-size:1.25rem;margin:.1rem 0 .2rem}
+.board.two .next{margin-top:.2rem;padding-top:.4rem}
+.board.two .cell b{font-size:1.8rem}
+.board.two .cell span{font-size:1.2rem}
+
+/* the one moment of motion: tiles flip in when the person on duty changes */
+@keyframes flip{
+  0%{transform:perspective(40rem) rotateX(-90deg);opacity:0}
+  55%{opacity:1}
+  100%{transform:perspective(40rem) rotateX(0);opacity:1}
+}
+.names.anim .tile{animation:flip .55s ease-out both}
+@media (prefers-reduced-motion:reduce){.names.anim .tile{animation:none}}
+
+.when{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:.55rem;text-align:right}
+.due{font-size:1.7rem;font-weight:700}
+.tag{
+  display:inline-block;padding:.2rem 1.1rem .25rem;border-radius:.35rem;background:var(--signal);color:var(--ink);
+  font-family:var(--flap);font-weight:700;font-size:2rem;line-height:1.1
+}
+.tag.done{background:var(--go)}
+.tag.today{background:var(--coral)}
+
+.alertBtn{
+  flex:none;margin-left:.8rem;padding:.2rem .75rem;border-radius:.35rem;border:.15rem solid var(--coral);
+  background:transparent;color:var(--coral);font-family:var(--flap);font-weight:700;font-size:1.25rem;line-height:1.2;cursor:pointer
+}
+.alertBtn:hover,.alertBtn:focus-visible{background:var(--coral);color:var(--ink)}
+.alertBtn:disabled{opacity:.55;cursor:wait}
+.alertFeedback{display:none;flex:none;margin:.2rem 0;color:var(--muted);font-size:1.1rem;line-height:1.3}
+.alertFeedback.ok{display:block;color:var(--go)}
+.alertFeedback.warn{display:block;color:var(--coral)}
+
+.late{
+  flex:none;margin:.2rem 0 .3rem;padding-left:.8rem;border-left:.3rem solid var(--coral);
+  font-size:1.4rem;font-weight:700;color:var(--coral)
+}
+.late:empty{display:none}
+
+.next{flex:none;display:flex;align-items:baseline;gap:1.6rem;margin-top:.4rem;padding-top:.6rem;border-top:.1rem solid var(--line)}
+.nextLabel{flex:none;width:6.5rem;font-size:1.3rem;color:var(--muted)}
+.cells{flex:1;min-width:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.5rem}
+.cell b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-family:var(--flap);font-size:2rem;line-height:1.15;font-weight:600}
+.cell span{display:block;font-size:1.3rem;color:var(--muted);margin-top:.1rem}
+.empty{margin:.5rem 0 .2rem;font-size:1.6rem;line-height:1.4;color:var(--muted)}
+
+footer{display:flex;justify-content:space-between;color:var(--muted);font-size:1.2rem;flex:none}
+.dot{display:inline-block;width:.8rem;height:.8rem;border-radius:50%;background:var(--signal);margin-right:.5rem}
+.dot.ok{background:var(--go)}
+.dot.bad{background:var(--coral)}
+/* Portrait layout: the TV board uses a fixed landscape canvas; this page stacks
+   the same live duties into touch-friendly cards for phones. */
+html{font-size:16px}
+html,body{height:auto;min-height:100%;overflow-x:hidden;overflow-y:auto}
+body{min-height:100vh;min-height:100dvh}
+.screen{width:min(100%,700px);min-height:100vh;min-height:100dvh;height:auto;margin:0 auto;padding:14px;display:flex;flex-direction:column}
+header{gap:10px;align-items:flex-start}
+.sign{font-size:clamp(1.35rem,6vw,2rem);padding:.45rem .75rem}
+.clock .time{font-size:clamp(1.55rem,8vw,2.4rem)}
+.date{font-size:.75rem;line-height:1.25}
+.board{flex:none;min-height:0;overflow:visible;margin:14px 0;display:flex;flex-direction:column}
+.block,.board.two .block{flex:none;min-height:0;overflow:visible;padding:16px}
+.blockHead{align-items:center;gap:8px;flex-wrap:wrap}
+.blockHead h2,.board.two .blockHead h2{font-size:2rem}
+.group{font-size:1.1rem}
+.sub{flex-basis:100%;margin-left:0;font-size:.85rem;order:3}
+.act{margin-left:auto}
+.alertBtn{min-height:44px;margin:0 0 0 auto;padding:8px 12px;font-size:1rem;touch-action:manipulation}
+.nowRow{flex:none;min-height:0;flex-direction:column;align-items:stretch;gap:14px;margin-top:14px}
+.names{justify-content:flex-start;align-content:flex-start;gap:6px}
+.sz1,.board.two .sz1{--tw:clamp(2.15rem,10vw,3.2rem);--th:clamp(3rem,14vw,4.3rem);--tf:clamp(2.35rem,11vw,3.6rem)}
+.sz2,.board.two .sz2{--tw:clamp(1.75rem,8vw,2.5rem);--th:clamp(2.5rem,11vw,3.4rem);--tf:clamp(1.9rem,8.6vw,2.8rem)}
+.sz3,.board.two .sz3{--tw:clamp(1.3rem,6vw,1.7rem);--th:clamp(1.9rem,8vw,2.4rem);--tf:clamp(1.5rem,6.8vw,2rem)}
+.amp,.board.two .amp{font-size:1.5rem}
+.when,.board.two .when{align-items:flex-start;text-align:left;gap:8px}
+.due,.board.two .due{font-size:1.15rem}
+.tag,.board.two .tag{font-size:1.2rem}
+.late,.board.two .late{font-size:.9rem;line-height:1.3;margin:.4rem 0}
+.alertFeedback{font-size:.85rem}
+.next,.board.two .next{flex:none;align-items:stretch;flex-direction:column;gap:8px;margin-top:12px;padding-top:10px}
+.nextLabel{width:auto;font-size:.85rem}
+.cells,.board.two .cells{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:8px}
+.cell{min-width:0;padding:8px;border:1px solid var(--line);border-radius:8px;background:rgba(7,26,68,.55)}
+.cell b,.board.two .cell b{font-size:1.1rem;line-height:1.2}
+.cell span,.board.two .cell span{font-size:.8rem}
+footer{flex-direction:column;gap:8px;font-size:.8rem;line-height:1.35}
+@media(max-width:360px){
+  .screen{padding:10px}
+  .block,.board.two .block{padding:12px}
+  .alertBtn{font-size:.9rem;padding:7px 9px}
+  .cells,.board.two .cells{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="screen">
+  <header>
+    <div class="sign">Chore board</div>
+    <div class="clock"><div class="time" id="time"></div><div class="date" id="date"></div></div>
+  </header>
+
+  <main class="board" id="board">
+    <section class="block" id="trashPanel"></section>
+    <section class="block" id="kitchenPanel"></section>
+  </main>
+
+  <footer>
+    <div><span class="dot" id="dot"></span><span id="statusText">Connecting…</span></div>
+    <div>Tap the trash alert button to notify the person on duty.</div>
+  </footer>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
+
+<script>
+"use strict";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyATlbBQsg6u4uLAfkq3vT9BOVpsLxz8wno",
+  authDomain: "trash-removal-27506.firebaseapp.com",
+  projectId: "trash-removal-27506",
+  storageBucket: "trash-removal-27506.firebasestorage.app",
+  messagingSenderId: "826302742550",
+  appId: "1:826302742550:web:28dad8c55c892661597537"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+/* ---------- State (same defaults as the phone dashboard) ---------- */
+let names = ["Afsal","Olivia","Louis","Samuel","Lydia","Evangelia","Sonia"];
+let ids = [0,1,2,3,4,5,6];
+let start = "2026-09-13";
+let kitchen = {intervalWeeks: 1, startDate: "", groups: []};
+let done = {}, kitchenDone = {}, overrides = {};
+let loaded = false;
+const health = {auth: null, config: null, other: null};
+
+/* ---------- Date helpers ---------- */
+function localDate(s){ const p = String(s).split("-").map(Number); return new Date(p[0], p[1]-1, p[2]); }
+function iso(d){ return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+function dayDiff(a,b){ return Math.round((localDate(a) - localDate(b)) / 86400000); }
+function addDaysKey(key,n){ const d = localDate(key); d.setDate(d.getDate()+n); return iso(d); }
+function dueSundayFor(s){
+  const d = localDate(s);
+  d.setDate(d.getDate() + (7 - d.getDay()) % 7);
+  return iso(d);
+}
+function esc(s){
+  return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+}
+
+/* ---------- Trash rotation ---------- */
+function duty(s){
+  const weekIndex = Math.floor((dayDiff(s, start) + 6) / 7);
+  return ((weekIndex % names.length) + names.length) % names.length;
+}
+function nameOf(pid){
+  const i = ids.indexOf(Number(pid));
+  return i >= 0 ? names[i] : "Former member";
+}
+function dutyFor(s){
+  const ov = overrides[dueSundayFor(s)];
+  if(ov && Number.isInteger(ov.personIndex) && ids.includes(ov.personIndex)) return ov.personIndex;
+  return ids[duty(s)];
+}
+
+/* ---------- Kitchen rotation ---------- */
+function kStart(){ return kitchen.startDate || start; }
+function kitchenGroups(){
+  return kitchen.groups
+    .map(g => ({...g, members: g.members.filter(p => ids.includes(p))}))
+    .filter(g => g.members.length);
+}
+function kitchenPeriodByIndex(p){
+  const gs = kitchenGroups();
+  if(!gs.length) return null;
+  return {
+    index: p,
+    due: addDaysKey(kStart(), p * kitchen.intervalWeeks * 7),
+    group: gs[((p % gs.length) + gs.length) % gs.length]
+  };
+}
+function kitchenPeriodFor(s){
+  return kitchenPeriodByIndex(Math.ceil(dayDiff(s, kStart()) / (kitchen.intervalWeeks * 7)));
+}
+
+/* ---------- Roster from Firestore ---------- */
+function applyConfig(data){
+  if(Array.isArray(data.names) && data.names.length >= 1){
+    const n = data.names.map(String);
+    const valid = Array.isArray(data.ids) && data.ids.length === n.length &&
+      data.ids.every(x => Number.isInteger(x) && x >= 0) && new Set(data.ids).size === n.length;
+    names = n;
+    ids = valid ? data.ids.slice() : n.map((_,i) => i);
+  }
+  if(typeof data.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(data.startDate)) start = data.startDate;
+  const k = data.kitchen;
+  if(k && typeof k === "object"){
+    const iv = Number(k.intervalWeeks);
+    kitchen.intervalWeeks = Number.isInteger(iv) && iv >= 1 && iv <= 8 ? iv : 1;
+    if(typeof k.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(k.startDate)) kitchen.startDate = k.startDate;
+    if(Array.isArray(k.groups)){
+      kitchen.groups = k.groups.filter(g => g && Number.isInteger(g.id)).map(g => ({
+        id: g.id, name: String(g.name || "Group"),
+        members: (Array.isArray(g.members) ? g.members : []).filter(Number.isInteger)
+      }));
+    }
+  }
+}
+
+/* ---------- Rendering ---------- */
+const fmtLong = key => localDate(key).toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"});
+const fmtShort = key => localDate(key).toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"});
+
+function countdown(due, today){
+  const n = dayDiff(due, today);
+  if(n <= 0) return {text:"Due today", cls:"today"};
+  if(n === 1) return {text:"Due tomorrow", cls:""};
+  return {text:"Due in " + n + " days", cls:""};
+}
+
+/* The block skeleton (title + name tiles) is rebuilt only when who is on duty changes,
+   so the flip-in plays once and the minute-by-minute refresh never restarts it. */
+function tiles(text, from){
+  return Array.from(String(text).toUpperCase()).map((ch,i) =>
+    ch === " " ? '<span class="tile" style="visibility:hidden;width:1rem"></span>'
+               : '<span class="tile" style="animation-delay:'+((from+i)*70)+'ms">'+esc(ch)+'</span>'
+  ).join("");
+}
+function skeleton(title, sub, groupName, who){
+  const chars = who.reduce((a,w) => a + Array.from(w).length, 0) + 2*(who.length-1);
+  const sz = chars <= 9 ? "sz1" : chars <= 14 ? "sz2" : "sz3";
+  let k = 0;
+  const names = who.map((w,i) => {
+    const html = (i ? '<span class="amp">&amp;</span>' : '') + '<span class="word">'+tiles(w, k)+'</span>';
+    k += Array.from(w).length + 1;
+    return html;
+  }).join("");
+  return '<div class="blockHead"><h2>'+esc(title)+'</h2>'+(groupName ? '<span class="group">'+esc(groupName)+'</span>' : '')+
+    '<span class="sub">'+esc(sub)+'</span><span class="act" data-act="'+esc(title.toLowerCase())+'"></span>'+(title === "Trash" ? '<button type="button" class="alertBtn" id="trashAlertBtn">🚨 Trash is full</button>' : '')+'</div>'+
+    '<div class="nowRow"><div class="names anim '+sz+'">'+names+'</div><div class="when"></div></div>'+
+    '<div class="late"></div><div class="alertFeedback" id="trashAlertStatus" role="status" aria-live="polite"></div><div class="next"></div>';
+}
+function setBlock(el, key, html){
+  el.classList.remove("hollow");
+  if(el.getAttribute("data-key") !== key){ el.setAttribute("data-key", key); el.innerHTML = html; }
+}
+function fillBlock(el, o){
+  const c = o.isDone ? {text:"✓ Done", cls:"done"} : countdown(o.due, o.today);
+  el.querySelector(".when").innerHTML = '<div class="due">'+fmtLong(o.due)+'</div><span class="tag '+c.cls+'">'+c.text+'</span>';
+  el.querySelector(".late").innerHTML = o.late || "";
+  el.querySelector(".next").innerHTML = '<span class="nextLabel">Up next</span><div class="cells">'+o.next+'</div>';
+}
+
+function renderTrash(today){
+  const el = document.getElementById("trashPanel");
+  const due = dueSundayFor(today);
+  const who = [nameOf(dutyFor(today))];
+
+  let next = "";
+  for(let k = 1; k <= 3; k++){
+    const d = addDaysKey(due, 7*k);
+    next += '<div class="cell"><b>'+esc(nameOf(dutyFor(d)))+'</b><span>'+fmtShort(d)+'</span></div>';
+  }
+
+  let late = "";
+  const prev = addDaysKey(due, -7);
+  if(dayDiff(prev, start) >= 0 && !done[prev]){
+    late = "Last week (" + esc(nameOf(dutyFor(prev))) + ") wasn't marked done";
+  }
+
+  setBlock(el, "trash|"+who.join("|"), skeleton("Trash", "One person per week", "", who));
+  fillBlock(el, {due, isDone: !!done[due], today, next, late});
+}
+
+function renderKitchen(today){
+  const el = document.getElementById("kitchenPanel");
+  const cur = kitchenPeriodFor(today);
+  document.getElementById("board").classList.toggle("two", !!cur);
+
+  if(!cur){
+    if(el.getAttribute("data-key") !== "kitchen|empty"){
+      el.setAttribute("data-key", "kitchen|empty");
+      el.innerHTML = '<div class="blockHead"><h2>Kitchen</h2></div>'+
+        '<div class="empty">No kitchen groups yet. Set them up in the phone app under Settings → Kitchen.</div>';
+    }
+    el.classList.add("hollow");
+    return;
+  }
+
+  const n = kitchen.intervalWeeks;
+  const who = cur.group.members.map(nameOf);
+
+  let next = "";
+  for(let k = 1; k <= 3; k++){
+    const p = kitchenPeriodByIndex(cur.index + k);
+    next += '<div class="cell"><b>'+esc(p.group.members.map(nameOf).join(" & "))+'</b><span>'+fmtShort(p.due)+'</span></div>';
+  }
+
+  let late = "";
+  const prev = kitchenPeriodByIndex(cur.index - 1);
+  if(prev && dayDiff(prev.due, kStart()) >= 0 && !kitchenDone[prev.due]){
+    late = "Last period (" + esc(prev.group.members.map(nameOf).join(" & ")) + ") wasn't marked done";
+  }
+
+  const sub = "Every " + (n === 1 ? "week" : n + " weeks") + ", groups take turns";
+  setBlock(el, "kitchen|"+cur.group.name+"|"+who.join("|")+"|"+n, skeleton("Kitchen", sub, cur.group.name, who));
+  fillBlock(el, {due: cur.due, isDone: !!kitchenDone[cur.due], today, next, late});
+}
+
+function renderStatus(){
+  const dot = document.getElementById("dot"), txt = document.getElementById("statusText");
+  const err = health.auth || health.config || health.other;
+  if(err){ dot.className = "dot bad"; txt.textContent = err; }
+  else if(!loaded){ dot.className = "dot"; txt.textContent = "Connecting…"; }
+  else { dot.className = "dot ok"; txt.textContent = "Live"; }
+}
+
+function renderClock(){
+  const now = new Date();
+  document.getElementById("time").textContent = now.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+  document.getElementById("date").textContent =
+    now.toLocaleDateString([], {weekday:"long", day:"numeric", month:"long", year:"numeric"});
+}
+
+/* ---------- Remote control: mark duties done from the TV ---------- */
+const remote = {on:false, sel:"trash", armed:null, busy:null, msg:{}, idleT:null, armT:null};
+
+function currentDuties(){
+  const today = iso(new Date());
+  const out = {trash:{due: dueSundayFor(today), isDone: !!done[dueSundayFor(today)]}};
+  const cur = kitchenPeriodFor(today);
+  if(cur) out.kitchen = {due: cur.due, isDone: !!kitchenDone[cur.due]};
+  return out;
+}
+
+function renderActs(){
+  const d = currentDuties();
+  if(!d[remote.sel]) remote.sel = "trash";
+  document.getElementById("board").classList.toggle("remote", remote.on);
+  ["trash","kitchen"].forEach(id => {
+    const block = document.getElementById(id + "Panel");
+    const act = block.querySelector(".act");
+    block.classList.toggle("sel", remote.on && remote.sel === id && !!d[id]);
+    if(!act || !d[id]) return;
+    let text;
+    if(remote.busy === id) text = "Saving…";
+    else if(remote.msg[id]) text = remote.msg[id];
+    else if(remote.armed === id) text = "Press OK again to " + (d[id].isDone ? "undo" : "confirm");
+    else text = d[id].isDone ? "Undo done" : "Mark done";
+    act.textContent = text;
+    act.className = "act" + (remote.on && remote.sel === id ? " sel" : "") + (remote.armed === id ? " armed" : "");
+  });
+}
+
+function disarm(){ remote.armed = null; clearTimeout(remote.armT); }
+function wake(){
+  remote.on = true;
+  clearTimeout(remote.idleT);
+  remote.idleT = setTimeout(() => { remote.on = false; disarm(); renderActs(); }, 20000);
+}
+
+function showTrashAlertStatus(message, kind){
+  const el=document.getElementById("trashAlertStatus");
+  if(!el)return;
+  el.textContent=message||"";
+  el.className="alertFeedback"+(message ? " "+(kind||"warn") : "");
+}
+
+async function sendTrashFullAlert(){
+  const button=document.getElementById("trashAlertBtn");
+  if(!auth.currentUser){showTrashAlertStatus("Still connecting to Firebase. Try again in a moment.","warn");return;}
+  if(!button||button.disabled)return;
+  button.disabled=true;
+  showTrashAlertStatus("Reporting the alert…","warn");
+  const due=dueSundayFor(iso(new Date()));
+  const dutyPersonIndex=dutyFor(due);
+  try{
+    const pending=await db.collection("alerts").where("dueDate","==",due)
+      .where("status","==","pending").limit(1).get();
+    if(!pending.empty){
+      showTrashAlertStatus("A trash alert is already pending for "+nameOf(dutyPersonIndex)+".","warn");
+      return;
+    }
+    await db.collection("alerts").add({
+      type:"trash_full",
+      dueDate:due,
+      dutyPersonIndex,
+      dutyPerson:nameOf(dutyPersonIndex)||"",
+      reportedByIndex:-1,
+      reportedBy:"TV board",
+      status:"pending",
+      createdAt:firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showTrashAlertStatus("Alert reported for "+nameOf(dutyPersonIndex)+". Push notification delivery is checked within five minutes.","ok");
+  }catch(error){
+    console.error("TV trash alert:",error);
+    showTrashAlertStatus("Could not report the alert. Check Firebase permissions and try again.","warn");
+  }finally{
+    button.disabled=false;
+  }
+}
+
+async function commitTrash(){
+  const due = dueSundayFor(iso(new Date()));
+  const completed = !done[due];
+  const personIndex = dutyFor(due);
+  const personName = nameOf(personIndex) || "";
+  const dutyRef = db.collection("duties").doc(due);
+  const boardRef = db.collection("leaderboard").doc(String(personIndex));
+  const ts = firebase.firestore.FieldValue.serverTimestamp();
+  // Same transaction as the phone app, so points on the leaderboard stay consistent.
+  await db.runTransaction(async tx => {
+    const dutySnap = await tx.get(dutyRef);
+    const boardSnap = await tx.get(boardRef);
+    const was = dutySnap.exists && dutySnap.data().completed === true;
+    if(was === completed) return;
+
+    const b = boardSnap.exists ? boardSnap.data() : {};
+    const refs = Array.isArray(b.awardedRefs) ? b.awardedRefs.slice() : [];
+    const awardRef = String(due) + "|assigned duty";
+    let points = Math.max(0, Number(b.points || 0));
+    let dutiesCompleted = Math.max(0, Number(b.dutiesCompleted || 0));
+    if(completed){
+      if(!refs.includes(awardRef)){ points += 10; dutiesCompleted += 1; refs.push(awardRef); }
+    }else{
+      points = Math.max(0, points - 10);
+      dutiesCompleted = Math.max(0, dutiesCompleted - 1);
+      const pos = refs.indexOf(awardRef);
+      if(pos !== -1) refs.splice(pos, 1);
+    }
+    tx.set(dutyRef, {
+      completed, personIndex, personName,
+      completedBy: completed ? personName : "",
+      completedAt: completed ? ts : null,
+      updatedAt: ts
+    }, {merge:true});
+    tx.set(boardRef, {
+      name: personName, points, dutiesCompleted,
+      extraDuties: Math.max(0, Number(b.extraDuties || 0)),
+      alertsHandled: Math.max(0, Number(b.alertsHandled || 0)),
+      achievements: Array.isArray(b.achievements) ? b.achievements : [],
+      awardedRefs: refs,
+      updatedAt: ts
+    }, {merge:true});
+  });
+}
+
+async function commitKitchen(){
+  const cur = kitchenPeriodFor(iso(new Date()));
+  if(!cur) return;
+  const completed = !kitchenDone[cur.due];
+  const ts = firebase.firestore.FieldValue.serverTimestamp();
+  await db.collection("kitchenDuties").doc(cur.due).set({
+    completed,
+    groupId: cur.group.id,
+    groupName: cur.group.name,
+    members: cur.group.members.map(nameOf),
+    completedAt: completed ? ts : null,
+    updatedAt: ts
+  }, {merge:true});
+}
+
+async function pressOK(){
+  const id = remote.sel;
+  if(remote.busy) return;
+  if(remote.armed !== id){            // first press: ask for confirmation
+    remote.armed = id; remote.msg[id] = "";
+    clearTimeout(remote.armT);
+    remote.armT = setTimeout(() => { remote.armed = null; renderActs(); }, 5000);
+    renderActs();
+    return;
+  }
+  disarm();                           // second press: save
+  remote.busy = id; renderActs();
+  try{
+    if(!auth.currentUser) throw {code:"not-signed-in"};
+    await (id === "trash" ? commitTrash() : commitKitchen());
+    remote.msg[id] = "";
+  }catch(err){
+    console.error(err);
+    remote.msg[id] = "Could not save (" + (err.code || "error") + ")";
+    setTimeout(() => { remote.msg[id] = ""; renderActs(); }, 6000);
+  }finally{
+    remote.busy = null; renderActs();
+  }
+}
+
+document.addEventListener("click",e=>{
+  if(e.target.closest("#trashAlertBtn"))sendTrashFullAlert();
+});
+
+document.addEventListener("keydown", e => {
+  const k = e.key, c = e.keyCode;
+  if(c === 403 || k === "r" || k === "R"){ location.reload(); return; }   // red button
+  const ok = k === "Enter" || c === 13 || c === 23;
+  const back = k === "Escape" || k === "Backspace" || c === 27 || c === 8 || c === 10009 || c === 461;
+  const arrow = {ArrowUp:-1, ArrowLeft:-1, ArrowDown:1, ArrowRight:1}[k] || ({37:-1, 38:-1, 39:1, 40:1})[c] || 0;
+  if(!loaded || !(ok || back || arrow)) return;
+  e.preventDefault();
+  const wasOn = remote.on;
+  wake();
+  if(back){ disarm(); renderActs(); return; }
+  if(arrow){
+    const ids = Object.keys(currentDuties());
+    remote.sel = ids[(Math.max(0, ids.indexOf(remote.sel)) + (arrow > 0 ? 1 : ids.length - 1)) % ids.length];
+    disarm(); renderActs(); return;
+  }
+  if(!wasOn){ renderActs(); return; }   // first press only wakes the highlight
+  pressOK();
+});
+
+function renderAll(){
+  const today = iso(new Date());
+  if(loaded){
+    renderTrash(today);
+    renderKitchen(today);
+  }else{
+    const t = document.getElementById("trashPanel"); t.removeAttribute("data-key"); t.innerHTML = '<div class="empty">Loading…</div>';
+    const k = document.getElementById("kitchenPanel"); k.removeAttribute("data-key"); k.innerHTML = '';
+  }
+  renderActs();
+  renderStatus();
+}
+
+/* ---------- Firebase (read-only) ---------- */
+async function start_() {
+  try{
+    await auth.signInAnonymously();
+  }catch(e){
+    health.auth = "Sign-in failed (" + (e.code || "unknown") + ")";
+    renderStatus();
+    setTimeout(start_, 30000);
+    return;
+  }
+  health.auth = null;
+
+  const fail = key => err => {
+    console.error(err);
+    health[key] = "Sync problem (" + (err.code || "unknown") + ")";
+    renderStatus();
+  };
+  const ok = key => { if(health[key]){ health[key] = null; renderStatus(); } };
+
+  db.collection("settings").doc("config").onSnapshot(snap => {
+    if(snap.exists) applyConfig(snap.data());
+    loaded = true; ok("config"); renderAll();
+  }, fail("config"));
+
+  db.collection("duties").onSnapshot(s => {
+    const m = {}; s.forEach(d => { if(d.data().completed === true) m[d.id] = true; });
+    done = m; ok("other"); renderAll();
+  }, fail("other"));
+
+  db.collection("dutyOverrides").onSnapshot(s => {
+    const m = {}; s.forEach(d => { m[d.id] = d.data(); });
+    overrides = m; renderAll();
+  }, fail("other"));
+
+  db.collection("kitchenDuties").onSnapshot(s => {
+    const m = {}; s.forEach(d => { if(d.data().completed === true) m[d.id] = true; });
+    kitchenDone = m; renderAll();
+  }, fail("other"));
+}
+
+/* ---------- Housekeeping ---------- */
+renderClock();
+renderAll();
+setInterval(() => { renderClock(); }, 1000);
+// Re-render every minute so "due today / tomorrow" and the week roll over by themselves.
+setInterval(renderAll, 60000);
+// Reload once a night to keep a long-running TV browser fresh.
+(function scheduleNightlyReload(){
+  const t = new Date(); t.setHours(3, 0, 0, 0);
+  if(t <= new Date()) t.setDate(t.getDate() + 1);
+  setTimeout(() => location.reload(), t - new Date());
+})();
+
+start_();
+</script>
+</body>
+</html>
