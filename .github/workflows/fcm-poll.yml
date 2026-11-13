@@ -25,11 +25,25 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Check whether sender credentials are configured
+        id: credentials
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Add the FIREBASE_SERVICE_ACCOUNT_JSON repository secret to enable push delivery."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install sender dependencies
+        if: steps.credentials.outputs.configured == 'true'
         working-directory: functions
         run: npm install --no-audit --no-fund
 
       - name: Send pending trash alerts
+        if: steps.credentials.outputs.configured == 'true'
         working-directory: functions
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
