@@ -112,6 +112,16 @@ header{display:flex;justify-content:space-between;align-items:center;flex:none}
 .tag.done{background:var(--go)}
 .tag.today{background:var(--coral)}
 
+.alertBtn{
+  flex:none;margin-left:.8rem;padding:.2rem .75rem;border-radius:.35rem;border:.15rem solid var(--coral);
+  background:transparent;color:var(--coral);font-family:var(--flap);font-weight:700;font-size:1.25rem;line-height:1.2;cursor:pointer
+}
+.alertBtn:hover,.alertBtn:focus-visible{background:var(--coral);color:var(--ink)}
+.alertBtn:disabled{opacity:.55;cursor:wait}
+.alertFeedback{display:none;flex:none;margin:.2rem 0;color:var(--muted);font-size:1.1rem;line-height:1.3}
+.alertFeedback.ok{display:block;color:var(--go)}
+.alertFeedback.warn{display:block;color:var(--coral)}
+
 .late{
   flex:none;margin:.2rem 0 .3rem;padding-left:.8rem;border-left:.3rem solid var(--coral);
   font-size:1.4rem;font-weight:700;color:var(--coral)
@@ -279,9 +289,9 @@ function skeleton(title, sub, groupName, who){
     return html;
   }).join("");
   return '<div class="blockHead"><h2>'+esc(title)+'</h2>'+(groupName ? '<span class="group">'+esc(groupName)+'</span>' : '')+
-    '<span class="sub">'+esc(sub)+'</span><span class="act" data-act="'+esc(title.toLowerCase())+'"></span></div>'+
+    '<span class="sub">'+esc(sub)+'</span><span class="act" data-act="'+esc(title.toLowerCase())+'"></span>'+(title === "Trash" ? '<button type="button" class="alertBtn" id="trashAlertBtn">🚨 Trash is full</button>' : '')+'</div>'+
     '<div class="nowRow"><div class="names anim '+sz+'">'+names+'</div><div class="when"></div></div>'+
-    '<div class="late"></div><div class="next"></div>';
+    '<div class="late"></div><div class="alertFeedback" id="trashAlertStatus" role="status" aria-live="polite"></div><div class="next"></div>';
 }
 function setBlock(el, key, html){
   el.classList.remove("hollow");
@@ -402,6 +412,47 @@ function wake(){
   remote.idleT = setTimeout(() => { remote.on = false; disarm(); renderActs(); }, 20000);
 }
 
+function showTrashAlertStatus(message, kind){
+  const el=document.getElementById("trashAlertStatus");
+  if(!el)return;
+  el.textContent=message||"";
+  el.className="alertFeedback"+(message ? " "+(kind||"warn") : "");
+}
+
+async function sendTrashFullAlert(){
+  const button=document.getElementById("trashAlertBtn");
+  if(!auth.currentUser){showTrashAlertStatus("Still connecting to Firebase. Try again in a moment.","warn");return;}
+  if(!button||button.disabled)return;
+  button.disabled=true;
+  showTrashAlertStatus("Reporting the alert…","warn");
+  const due=dueSundayFor(iso(new Date()));
+  const dutyPersonIndex=dutyFor(due);
+  try{
+    const pending=await db.collection("alerts").where("dueDate","==",due)
+      .where("status","==","pending").limit(1).get();
+    if(!pending.empty){
+      showTrashAlertStatus("A trash alert is already pending for "+nameOf(dutyPersonIndex)+".","warn");
+      return;
+    }
+    await db.collection("alerts").add({
+      type:"trash_full",
+      dueDate:due,
+      dutyPersonIndex,
+      dutyPerson:nameOf(dutyPersonIndex)||"",
+      reportedByIndex:-1,
+      reportedBy:"TV board",
+      status:"pending",
+      createdAt:firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showTrashAlertStatus("Alert reported for "+nameOf(dutyPersonIndex)+". Push notification delivery is checked within five minutes.","ok");
+  }catch(error){
+    console.error("TV trash alert:",error);
+    showTrashAlertStatus("Could not report the alert. Check Firebase permissions and try again.","warn");
+  }finally{
+    button.disabled=false;
+  }
+}
+
 async function commitTrash(){
   const due = dueSundayFor(iso(new Date()));
   const completed = !done[due];
@@ -486,6 +537,10 @@ async function pressOK(){
     remote.busy = null; renderActs();
   }
 }
+
+document.addEventListener("click",e=>{
+  if(e.target.closest("#trashAlertBtn"))sendTrashFullAlert();
+});
 
 document.addEventListener("keydown", e => {
   const k = e.key, c = e.keyCode;
