@@ -89,6 +89,12 @@ input,select,.row input,.row select,.personRow input,.groupHead input,.groupBox 
 .platform h3{margin:0 0 8px;font-size:20px}
 .platform ol{margin:6px 0 0;padding-left:21px}
 .platform li{margin:6px 0;color:var(--text);line-height:1.4;font-size:14px}
+/* Notification setup links */
+.pushSetupLinks{margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--cell)}
+.pushSetupLinks h4{margin:0 0 5px;color:var(--signal);font-size:15px}
+.pushSetupLinks p{margin:0 0 8px;color:var(--muted);font-size:11px;line-height:1.4}
+.pushSetupRow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:12px}
+.pushSetupRow button{font-size:11px;padding:5px 8px;white-space:nowrap}
 @media(max-width:1100px){
   .main-grid{grid-template-columns:210px minmax(520px,1fr) 210px}
   .wrap{width:min(1100px,calc(100% - 20px))}
@@ -336,6 +342,11 @@ input,select,.row input,.row select,.personRow input,.groupHead input,.groupBox 
       <h3>Household members</h3>
       <div class="muted">Add, rename, reorder or remove people. The order here is the trash rotation order.</div>
       <div id="peopleList"></div>
+      <div class="pushSetupLinks">
+        <h4>🔔 Notification setup links</h4>
+        <p>Send each person their link. It selects their name and takes them to the notification button. They still need to tap it and allow notifications.</p>
+        <div id="pushSetupLinkList"></div>
+      </div>
       <div class="row">
         <input id="newPersonName" maxlength="30" placeholder="Add a person…" autocomplete="off">
         <button class="primary" id="addPersonBtn" type="button">＋ Add</button>
@@ -969,7 +980,14 @@ auth.onAuthStateChanged(async user => {
       }
     }
 
+    const pushSetupPerson=applyPushSetupLink();
     renderAll();
+    if(pushSetupPerson!==null){
+      const pushStatus=document.getElementById("pushStatus");
+      pushStatus.textContent="This link is set up for "+nameOf(pushSetupPerson)+". Tap the button above and allow notifications to finish.";
+      pushStatus.className="alertStatus warn";
+      requestAnimationFrame(()=>document.getElementById("enableNotificationsBtn").scrollIntoView({behavior:"smooth",block:"center"}));
+    }
     subscribeLeaderboard();
     loadExtraDutyCount();
     updatePushButton();
@@ -1096,9 +1114,52 @@ function openSettings(tab){
 
   settingsMsg("");
   renderPeopleList();
+  renderPushSetupLinks();
   renderGroupsList();
   setTab(typeof tab === "string" ? tab : "people");
   document.getElementById("settingsModal").classList.add("show");
+}
+
+function renderPushSetupLinks(){
+  const list=document.getElementById("pushSetupLinkList");
+  if(!list)return;
+  list.innerHTML=names.map((name,index)=>
+    '<div class="pushSetupRow"><span>'+escapeHtml(name)+'</span>'+ 
+    '<button type="button" data-push-setup-person="'+ids[index]+'">Copy link</button></div>'
+  ).join("");
+  list.querySelectorAll("[data-push-setup-person]").forEach(button=>{
+    button.addEventListener("click",async()=>{
+      const personId=Number(button.dataset.pushSetupPerson);
+      const url=new URL("./index4.html",window.location.href);
+      url.searchParams.set("setupPush","1");
+      url.searchParams.set("person",String(personId));
+      try{
+        await navigator.clipboard.writeText(url.href);
+        const original=button.textContent;
+        button.textContent="Copied!";
+        setTimeout(()=>{button.textContent=original;},1800);
+      }catch(error){
+        window.prompt("Copy this notification setup link:",url.href);
+      }
+    });
+  });
+}
+
+function applyPushSetupLink(){
+  const params=new URLSearchParams(window.location.search);
+  if(params.get("setupPush")!=="1")return null;
+  const personId=Number(params.get("person"));
+  if(!Number.isInteger(personId)||!ids.includes(personId))return null;
+  selectedPerson=personId;
+  localStorage.setItem("selectedPerson",String(personId));
+  return personId;
+}
+
+function clearPushSetupLink(){
+  const url=new URL(window.location.href);
+  url.searchParams.delete("setupPush");
+  url.searchParams.delete("person");
+  history.replaceState(null,"",url.pathname+url.search+url.hash);
 }
 
 function closeSettings(){
@@ -2072,6 +2133,7 @@ async function enablePushNotifications(){
     await registerPushNotifications();
     statusEl.textContent="✓ Push notifications are enabled for "+(nameOf(selectedPerson)||"your selected person")+".";
     statusEl.className="alertStatus ok";
+    clearPushSetupLink();
     updatePushButton();
   }catch(error){
     console.error("Push registration:",error);
@@ -2088,6 +2150,8 @@ function updatePushButton(){
   if(!("Notification" in window)){
     btn.textContent="🔔 Notifications not supported";
     btn.disabled=true;
+  }else if(new URLSearchParams(window.location.search).get("setupPush")==="1"){
+    btn.textContent="🔔 Connect notifications for "+(nameOf(selectedPerson)||"your name");
   }else if(Notification.permission==="granted"){
     btn.textContent="🔔 Push notifications enabled";
   }else if(Notification.permission==="denied"){
